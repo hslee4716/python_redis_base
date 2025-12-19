@@ -49,8 +49,13 @@ class RedisPaddleWorker(RedisWorker):
     def set_processor(self):
         self.processor = OCRProcessor()
     
-    def process(self, resp) -> dict:
+    def process(self, resp: bytes) -> dict:
         '''
+        resp:{
+            "stream": str,
+            "messages": list[dict],
+        }
+        
         payload : {
             "image_path": "path/to/image.jpg",
             "page_number": int,
@@ -60,28 +65,26 @@ class RedisPaddleWorker(RedisWorker):
         payloads = []
         messages = []
         for stream_id, msgs in resp:
-            for m in msgs:
-                msg_id, fields = m
-                raw_payload = fields.get("payload")
-                try:
-                    # JSON 문자열이면 파싱, 아니면 그대로 사용
-                    payload = json.loads(raw_payload) if isinstance(raw_payload, str) else raw_payload
-                except Exception:
-                    payload = raw_payload
-
-                messages.append(fields)
+            for msg_id, fields in msgs:
+                payload = json.loads(fields[b"payload"])
+                messages.append({
+                    "stream_id": stream_id.decode(),
+                    "msg_id": msg_id.decode(),
+                    "job_id": fields[b"job_id"].decode(),
+                    "payload": payload,
+                    "timestamp": fields[b"timestamp"].decode(),
+                })
                 payloads.append(payload)
         
         image_paths = [message["payload"]["image_path"] for message in messages]
         # test
-        # from pathlib import Path
-        # image_paths = [f"/home/hslee/workdir/test/redis_test/sample_image/{Path(p).name}" for p in image_paths]
+        from pathlib import Path
+        image_paths = [f"/home/hslee/workdir/test/redis_test/sample_image/{Path(p).name}" for p in image_paths]
         # test
         
         results = self.processor.ocr(image_paths)
         for message, result in zip(messages, results):
             message["payload"]["result"] = result
-        
         return messages
 
 CONSUMER_NAME = os.getenv("CONSUMER_NAME", socket.gethostname())
@@ -96,7 +99,7 @@ def main():
         port=REDIS_PORT_OCR,
         input_streams=OCR_input_streams,
         output_streams=OCR_result_streams,
-        # worker_id=WORKER_ID
+        worker_id=WORKER_ID
     )
     worker.listen()
 

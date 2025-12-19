@@ -3,6 +3,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    environment:
+      - TEST=1
     ports:
       - "6379:6379"
     command: ["redis-server", "--save", "", "--appendonly", "yes"]  # persistence on for demo
@@ -11,6 +13,7 @@ services:
     build:
       context: .
       dockerfile: redis_load_balancer/workers/paddle/Dockerfile
+    # image: my-paddle-worker:latest  # 빌드 후 이 이름으로 태그됨  
     environment:
       - PYTHONUNBUFFERED=1
       - DEVICE=0
@@ -21,6 +24,28 @@ services:
     depends_on:
       - redis
     volumes:
-      - /home/hslee/workdir/test/redis_test/sample_image:/app/sample_image
+      - shared_cache:/app/cache
+      - shared_sample:/app/sample_image
 
-# docker compose up --force-recreate --scale worker=4 --build
+
+  tester:
+    build:
+      context: .
+      dockerfile: redis_load_balancer/workers/paddle/Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DEVICE=0
+      - REDIS_HOST_OCR=redis
+    command: ["python", "-m", "redis_load_balancer.workers.paddle.tester"]
+    gpus: all
+    depends_on:
+      - redis
+    volumes:
+      - shared_cache:/app/cache
+      - shared_sample:/app/sample_image
+
+volumes:
+  shared_cache:
+  shared_sample:
+
+# docker compose up --force-recreate --scale worker=4 --scale tester=1 --build

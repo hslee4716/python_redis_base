@@ -25,5 +25,4 @@ RUN pip install -r requirements.txt
 # 애플리케이션 코드 복사
 COPY redis_load_balancer /app/redis_load_balancer
 COPY weights /app/weights
-COPY sample_image /app/sample_image
 

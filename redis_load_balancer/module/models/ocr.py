@@ -1,5 +1,7 @@
-from annotated_types import IsDigit
 from redis_load_balancer import WEIGHTS_DIR, DEVICE
+import os
+
+from annotated_types import IsDigit
 from paddleocr import PaddleOCR
 import numpy as np
 import paddle
@@ -64,7 +66,8 @@ def draw_text(img, text, bbox, fontsz=None, fill=(0, 255, 0), center=True, x_shi
     return img
 
 class OCRProcessor:
-    def __init__(self, model_dir=WEIGHTS_DIR, fast=True, det_options={'return_word_box': True}):
+    def __init__(self, model_dir=WEIGHTS_DIR, fast=True, det_options={}):
+        # det_options={'return_word_box': True}
         self.det_options = det_options
         if model_dir:
             text_detection_model_name="PP-OCRv5_mobile_det"

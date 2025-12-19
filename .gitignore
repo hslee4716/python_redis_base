@@ -4,3 +4,5 @@ __pycache__/
 temp/
 weights/
 sample*/
+docker_images/
+cache/

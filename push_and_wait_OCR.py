@@ -24,8 +24,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 STREAM_REQ = REIDS_STREAM_REQ_OCR
 STREAM_RESP = REIDS_STREAM_RESP_OCR
 
-# Redis 연결 (binary mode)
-r = redis.Redis(host=REDIS_HOST_OCR, port=REDIS_PORT_OCR, decode_responses=False)
+# Redis 연결 (문자열 모드 - UTF-8 디코딩 자동)
+r = redis.Redis(host=REDIS_HOST_OCR, port=REDIS_PORT_OCR, decode_responses=True)
 
 
 def get_last_resp_id():
@@ -37,21 +37,21 @@ def get_last_resp_id():
         last = r.xrevrange(STREAM_RESP, count=1)  # [(id, fields), ...]
         if not last:
             return "0-0"
+        # decode_responses=True 이므로 msg_id 는 이미 str
         last_id = last[0][0]
-        # ensure type is str for xread usage
-        if isinstance(last_id, bytes):
-            last_id = last_id.decode()
         return last_id
     except Exception as e:
         print("[get_last_resp_id] error:", e)
         return "0-0"
 
-def send_one(payload: bytes) -> str:
+def send_one(payload: str) -> str:
     job_id = str(uuid.uuid4())
+    # decode_responses=True 이므로 key/value 를 문자열로 넘기면
+    # 내부에서 UTF-8로 인코딩되어 저장된다.
     fields = {
-        b"job_id": job_id.encode(),
-        b"payload": payload,
-        b"timestamp": str(time.time()).encode(),
+        "job_id": job_id,
+        "payload": payload,
+        "timestamp": str(time.time()),
     }
     msg_id = r.xadd(REIDS_STREAM_REQ_OCR, fields)
     print(f"[send] job_id={job_id} msg_id={msg_id}")
@@ -59,7 +59,8 @@ def send_one(payload: bytes) -> str:
 
 def push_many(payloads, max_workers=8):
     job_ids = []
-    payloads = [json.dumps(p).encode() for p in payloads]
+    # JSON 문자열로만 만들고, 따로 encode()는 하지 않는다.
+    payloads = [json.dumps(p) for p in payloads]
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures = {ex.submit(send_one, p): idx for idx, p in enumerate(payloads)}
         for fut in as_completed(futures):
@@ -88,20 +89,16 @@ def wait_for_results(expected_job_ids, timeout=60, start_after_id="0-0"):
 
         for stream_name, messages in out:
             for msg_id, fields in messages:
-                # update last_id so next read continues from here
-                # xread expects id of the last read message; to avoid re-reading same message,
-                # we set last_id to msg_id
-                if isinstance(msg_id, bytes):
-                    last_id = msg_id.decode()
-                else:
-                    last_id = msg_id
+                # decode_responses=True 이므로 msg_id 는 이미 str
+                # 다음 읽기는 이 msg_id 이후부터 시작
+                last_id = msg_id
 
                 try:
-                    job_id_val = fields.get(b"job_id") or fields.get("job_id")
-                    result = fields.get(b"result") or fields.get("result")
-                    if job_id_val is None:
+                    # decode_responses=True 이므로 key/value 모두 str
+                    job_id = fields.get("job_id")
+                    result = fields.get("payload")
+                    if job_id is None:
                         continue
-                    job_id = job_id_val.decode() if isinstance(job_id_val, (bytes, bytearray)) else str(job_id_val)
                     seen[job_id] = result
                     print(f"[wait] got result for {job_id} (msg {last_id})")
                 except Exception as e:
@@ -133,8 +130,11 @@ def main(concurrency=8, timeout=600):
     for i, jid in enumerate(job_ids):
         if jid in results:
             res = results[jid]
-            out = res.decode() if isinstance(res, (bytes, bytearray)) else str(res)
-            out = json.loads(out)
+            # 결과는 JSON 문자열이라고 가정
+            try:
+                out = json.loads(res)
+            except Exception:
+                out = res
             # out_key = ["payload", "worker_id"]
             # out = {k: v for k, v in out.items() if k in out_key}
             print(f"  {i+1}. {jid} -> {out}")
@@ -150,5 +150,6 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=REDIS_PORT_OCR)
     args = parser.parse_args()
 
-    r = redis.Redis(host=args.host, port=args.port, decode_responses=False)
-    main( concurrency=args.concurrency, timeout=args.timeout)
+    # main 에서 사용하는 전역 r 을 재설정 (문자열 모드)
+    r = redis.Redis(host=args.host, port=args.port, decode_responses=True)
+    main(concurrency=args.concurrency, timeout=args.timeout)
