@@ -16,7 +16,7 @@ services:
     # image: my-paddle-worker:latest  # 빌드 후 이 이름으로 태그됨  
     environment:
       - PYTHONUNBUFFERED=1
-      - DEVICE=0
+      - DEVICE=cpu
       - REDIS_HOST_OCR=redis
     command: ["python", "-m", "redis_load_balancer.workers.paddle.paddle_worker"]
     gpus: all
@@ -34,7 +34,7 @@ services:
       dockerfile: redis_load_balancer/workers/paddle/Dockerfile
     environment:
       - PYTHONUNBUFFERED=1
-      - DEVICE=0
+      - DEVICE=cpu
       - REDIS_HOST_OCR=redis
     command: ["python", "-m", "redis_load_balancer.workers.paddle.tester"]
     gpus: all

@@ -13,14 +13,14 @@ RUN apt-get update && \
         libxext6 \
         libxrender1 \
         ffmpeg \
+        vim \
+        nano \
     && ln -s /usr/bin/python3 /usr/bin/python && \
     python -m pip install --upgrade pip && \
     rm -rf /var/lib/apt/lists/*
 
-# 의존성 먼저 복사해서 캐시 최대 활용
-COPY requirements.txt /app/requirements.txt
-
-RUN pip install -r requirements.txt
+COPY requirements-cpu.txt /app/requirements-cpu.txt
+RUN pip install -r requirements-cpu.txt
 
 # 애플리케이션 코드 복사
 COPY redis_load_balancer /app/redis_load_balancer

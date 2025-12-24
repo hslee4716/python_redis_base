@@ -14,3 +14,8 @@ docker save -o docker_images/redis.tar 13105d2858de
 # tar to docker image
 docker load -i docker_images/paddle_worker.tar
 
+
+# change tag
+sudo docker tag <image_id> redis:latest
+sudo docker tag <image_id> my-paddle-worker:latest
+sudo docker tag <image_id> my-paddle-tester:latest

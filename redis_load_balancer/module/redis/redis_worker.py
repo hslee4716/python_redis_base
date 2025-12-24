@@ -95,16 +95,35 @@ class RedisWorker:
         return messages
             
     def create_group(self, streams: list[dict]):
+        # 중복 호출 방지를 위한 플래그 체크
+        if not hasattr(self, '_groups_created'):
+            self._groups_created = set()
+        
+        # 이미 생성한 그룹인지 확인
+        stream_groups = tuple((s['stream'], s['group']) for s in streams)
+        if stream_groups in self._groups_created:
+            return  # 이미 생성했으면 스킵
+        
+        created_groups = []
+        existing_groups = []
         for stream in streams:
             try:
                 self.r.xgroup_create(stream['stream'], stream['group'], id='0-0', mkstream=True)
-                print(f"[{self.worker_id}] created group '{stream['group']}'")
+                created_groups.append(stream['group'])
             except redis.exceptions.ResponseError as e:
                 # group already exists
                 if "BUSYGROUP" in str(e):
-                    print(f"[{self.worker_id}] group already exists")
+                    existing_groups.append(stream['group'])
                 else:
                     raise
+        
+        # 생성 완료 표시
+        self._groups_created.add(stream_groups)
+        
+        if created_groups:
+            print(f"[{self.worker_id}] created groups: {', '.join(created_groups)}")
+        if existing_groups:
+            print(f"[{self.worker_id}] groups already exist: {', '.join(existing_groups)}")
                 
     def read_messages(self, streams: list[dict]):
         for stream in streams:
